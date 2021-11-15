@@ -1,0 +1,19 @@
+Package: mosub
+Type: Package
+Title: Identification of multi-optimal subnetworks
+Version: 1.0.0
+Date: 2015-07-10
+Authors@R: c(person("Ettore", "Mosca", role = c("aut", "cre"),
+		     email = "ettore.mosca@itb.cnr.it"),
+	      person("Luciano", "Milanesi", role = "aut"))
+Author: Ettore Mosca [aut, cre],
+  Luciano Milanesi[aut]
+Maintainer: Ettore Mosca <ettore.mosca@itb.cnr.it>
+Description: The package implements a search heuristic that finds multi-optimal subnetworks.
+License: GPL-3
+Depends: R (>= 3.1)
+Imports: data.table, igraph, randtoolbox, RMySQL, parallel
+Suggests: knitr
+VignetteBuilder: knitr
+LazyData: true
+RoxygenNote: 7.1.2

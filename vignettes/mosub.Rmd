@@ -1,0 +1,176 @@
+---
+title: "mosub: an R Package for the Identification of Multi-Optimal Subnetworks"
+author: "Ettore Mosca"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+bibliography: references.bib
+---
+
+## Introduction
+
+The `mosub` package is designed for the identification of multi-optimal subnetworks. The problem is formulated as the multi-objective optimization of two or more functions  that are evaluated on subnetworks. The problem is solved using a graph-based version [@Mosca2013] of the Non-dominated Sorting Genetic Algorithm II (NSGA-II) [@Deb2002]. Each solution of the problem is a set of identifiers that form a connected subnetwork and genetic operators are designed to modify subnetworks within the constraints of the network they belong to.
+
+## Installation
+After having downloaded and unzipped the file `ftp://fileshare.itb.cnr.it/Public/ettore_mosca/mosub_1.0.zip`, `mosub` can be easily installed from the R console:
+```{r, fig.show='hold', eval=FALSE}
+install.packages("/your/dir/mosub_1.0.0.tar.gz")
+```
+
+## Getting started \label{sec:gs}
+In the R console, load the package:
+
+```{r, eval = FALSE}
+library(mosub)
+```
+A brief overview of the package is available executing:
+
+```{r, eval=FALSE}
+library(help=mosub)
+```
+and the help of any function (e.g. `mosub_find`) can be screened with one of the two following commands:
+
+```{r, eval=FALSE}
+help(mosub_find)
+?mosub_find
+```
+
+## Basic analysis \label{sec:basic}
+
+In this section we describe the steps required to run a basic analysis. More advanced analysis can be done using custom input data, manipulating the arguments of the main function `mosub_find` (see the corresponding help page) and running the optimization in parallel.
+
+### Loading input data
+
+The main function that handles the optimization is `mosub_find` and requires two major arguments: interaction data and a function that evaluates the optimality of subnetworks. The package contains predefined human protein-protein interactions collected from the database STRING [@Szklarczyk2011] organized in the `data.frame` names `interactions`, in which the fields `a` and `b` are Entrez Gene ids and `score` is the interaction confidence from STRING:
+```{r}
+library(mosub)
+data(mosub_data)
+class(interactions)
+head(interactions)
+dim(interactions)
+```
+
+A predefined function that evaluates a subnetwork according to two criteria is implemented in `eval.obj.ee`. This routine applies the Parametric Analysis of Gene Enrichment [@Kim2005] to the subnetwork, using two expression data sets (`exprs1` and `exprs2`):
+
+```{r}
+eval.obj.ee
+```
+
+The expression data required by this function are also provided in the `mosub` package as two named vectors `ge1` and `ge2` in which names are Entrez Gene ids:
+
+```{r}
+head(ge1)
+head(ge2)
+```
+
+These data sets contain expression data in the form of log2 fold changes between breast carcinoma and normal samples, collected from the cancer genome atlas \cite{atlas}. Further details on how to create custom interaction data and custom functions for objectives evaluation are given below.
+
+
+\subsection{Performing the multi-objective optimization}
+
+Having loaded the required input data, we can run the search heuristic to find the subnetworks enricheed in genes that show gene expression variation in the two data sets `ge1` and `ge2`:
+
+```{r, eval = FALSE}
+res.10 <- mosub_find(gen=c(1, 5, 10), pop=100, M=2,
+    interactions=interactions, eval_obj=eval.obj.ee,
+    eval_obj.p=list(exprs1=abs(ge1), exprs2=abs(ge2)))
+```
+
+Note that we must set the number of generations (`gen`), the number of individuals (`pop`) and the number of objective functions (`M`). In order to achieve a satisfactory Pareto front in this specific case the first two parameters, `gen` and `pop`, should be set to values higher than those used here. The resulting object contains the final population (`res$individuals`), the respective objective values (`res$objectives`), ranks (`res$rank`) and crowding distances (`res$cd`):
+```{r}
+names(res.10)
+```
+
+## Post processing
+
+Here we will consider the predefined results of an optimization with the same setting described above, but run for 500 generations. We can plot the values of the objective functions for the multi-optimal population, highlighting with a different color the Pareto front, i.e. the individuals with rank equal to 1:
+
+```{r, fig=TRUE, echo=TRUE, fig.height=7, fig.width=7}
+plot(res.500$objectives, pch=16, xlab='f1', ylab='f2')
+points(res.500$objectives[res.500$rank==1, ], pch=16, col='red')
+```
+
+We can use the function `mn.sim` to calculate the matrix of pair-wise similarity among individuals and observe the clustering:
+
+```{r, fig=TRUE, echo=TRUE, fig.height=7, fig.width=7}
+sim <- mn.sim(res.500$individuals)
+plot(hclust(as.dist(1-sim), method='ward'))
+```
+
+An important quality measure for the multi-objective optimization is the hypervolume indicator. This measure can be used to compare the results of different optimizations. Here we compare the subnetworks found using 10, 100 and 500 iterations. Before calculating the hypervolume, we have to join and normalize the Pareto fronts:
+
+```{r, fig=TRUE, echo=TRUE, fig.height=7, fig.width=7}
+N10 <- length(which(res.10$rank==1))
+N100 <- length(which(res.100$rank==1))
+N500 <- length(which(res.500$rank==1))
+fronts <- data.frame(rbind(res.10$objectives[res.10$rank==1, ],
+    res.100$objectives[res.100$rank==1, ],
+    res.500$objectives[res.500$rank==1, ]), run=c(rep(10, N10),
+        rep(100, N100), rep(500, N500)))
+fronts[, 1:2] <- pareto.normalize(fronts[, 1:2])
+pareto.hypervolume(as.matrix(fronts[fronts$run == 10, 1:2]))
+pareto.hypervolume(as.matrix(fronts[fronts$run == 100, 1:2]))
+pareto.hypervolume(as.matrix(fronts[fronts$run == 500, 1:2]))
+plot(fronts[, 1:2], pch=16, col=as.numeric(factor(fronts$run)))
+```
+
+As expected, the Pareto front and the associated hypervolume indicator improve with iterations.
+
+As already said, each solution of the multi-objective optimization problem address by `mosub` is a connected graph. For each solution, we can obtain the associated `igraph` object used by igraph [@Csardi2006]:
+
+```{r, eval = FALSE}
+res.500 <- population.postProcess(res.500,
+    interactions=interactions)
+```
+```{r}
+names(res.500)
+res.500$igraphs[[1]]
+```
+As we can see, the function `population.postProcess` adds the element `igraphs` to the output of `mosub_find`. At this point, a lot of analysis can be done using the functions provided by the package igraph, including exportation for use with Cytoscape, the Java-based open source platform for complex network visualization [@Smoot2011]. In the following example, we plot a subnetwork: 
+
+```{r, fig=TRUE, echo=TRUE, fig.height=7, fig.width=7}
+library(igraph)
+plot.igraph(res.500$igraph[[1]], layout=layout.lgl)
+```
+
+Of course, using the appropriate annotations, it is possible to create more informative visualizations.
+
+## Custom interaction data \label{sec:int}
+Interaction data supported by `mosub_find` should be prepared according to the following requirements:
+
+1. interactions should be organized as a `data.frame` with three fields: `a`, `b` for the ids;
+
+2. a given interaction `(a=Node1, b=Node2)` must be also available as `(a=Node2, b=Node1)`;
+
+3. interaction data should correspond to a connected graph.
+
+
+## Custom objectives function
+The function that evaluates the optimality of an individual must be defined with two parameters:
+
+1. a vector of ids that represent the subnetwork
+
+2. a list of parameters `eval.obj.p` that are used within the function
+
+and should return a numeric vector of length equal to the number of objectives. Note that `x` must be a subset of the ids appearing in fields `a` and `b` of the `data.frame` containing the interactions.
+
+## Parallel computations \label{sec:parallel}
+`mosub` carries out parallel computations by means of `parallel::mclapply()` function. Besides, it is possible to run several independent instances of `mosub_find` and enable the sharing of partial results by means of an MySQL database. This feature is based on the package RMySQL [@James2012] and requires the definition of a table in a database reachable by all the `mosub_find` instances. The table should have the following five fields:
+
+1. `individual` of type `text`;
+
+2. `rank` of type `int`;
+
+3. `id` of type `int`;
+
+4. `gen` of type `int`;
+
+5. `dist` of type `varchar`.
+
+Each instance of `mosub_find` must be run with a unique and specific value of `INDEX`, in order to label uniquely the individuals coming from distinct populations.
+
+
+## References

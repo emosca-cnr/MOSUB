@@ -1,0 +1,14 @@
+year <- sub("-.*", "", meta$Date)
+note <- sprintf("R package version %s", meta$Version)
+
+bibentry(bibtype = "Article",
+         title = "Network-based analysis of omics with multi-objective optimization",
+         author = c(person("Ettore", "Mosca"),
+                    person("Luciano", "Milanesi")),
+         year = 2013,
+         journal = "Molecular Biosystems",
+         number = 12,
+         pages = "2971-2980",
+         volume = 9,
+         publisher = "Royal Society of Chemistry"
+         )
